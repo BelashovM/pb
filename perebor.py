@@ -27,18 +27,18 @@ def process_folder(folder_path):
     return data_by_alpha
 
 # Модель
-def model(alpha, A, B, phi1, phi2, y1, y2):
-    alpha_rad1 = np.radians(alpha + phi1)
-    alpha_rad2 = np.radians(alpha + phi2)
+def model(alpha, A, B, y1, y2):
+    alpha_rad1 = np.radians(alpha)
+    alpha_rad2 = np.radians(alpha)
     term1 = A * np.sin(2 * alpha_rad1) * y2
     term2 = B * (np.cos(2 * alpha_rad2) ** 2) * y1
     return term1 + term2
 
 # Функция ошибки
-def calculate_error(A, B, phi1, phi2, alpha_values, y_data, y1, y2):
+def calculate_error(A, B, alpha_values, y_data, y1, y2):
     total_error = 0
     for i, alpha in enumerate(alpha_values):
-        y_model = model(alpha, A, B, phi1, phi2, y1, y2)
+        y_model = model(alpha, A, B, y1, y2)
         total_error += np.sum((y_data[i] - y_model) ** 2)
     return total_error
 
@@ -58,38 +58,32 @@ alpha_values = list(data_by_alpha.keys())
 y_data = np.array([data[:, 3] for data in data_by_alpha.values()])
 x = np.linspace(0, len(y1) - 1, len(y1))
 
-# Перебор параметров A и B
-phi1, phi2 = 0, 0  # Фиксируем фазы phi1 и phi2 на 0 для простоты
-best_A, best_B = 0, 0
-min_error = np.inf
-step = 0.0001
+# Перебор параметров A и B с векторизацией
+print("Запуск оптимизации...")
+A_range = np.linspace(-1, 1, 10000)  # Шаг 0.02
+B_range = np.linspace(-1, 1, 10000)
 
-print("Запуск перебора коэффициентов A и B...")
-A_range = np.arange(-1, 1.0001, step)
-B_range = np.arange(-1, 1.0001, step)
-total_iterations = len(A_range) * len(B_range)
-current_iteration = 0
+# Векторизованный расчет ошибок
+errors = np.zeros((len(A_range), len(B_range)))
+for i, A in enumerate(A_range):
+    for j, B in enumerate(B_range):
+        total_error = calculate_error(A, B, alpha_values, y_data, y1, y2)
+        errors[i, j] = total_error
 
-for A in A_range:
-    for B in B_range:
-        error = calculate_error(A, B, phi1, phi2, alpha_values, y_data, y1, y2)
-        current_iteration += 1
-        # Строка состояния
-        if current_iteration % 1000000 == 0 or current_iteration == total_iterations:
-            print(f"Итерация {current_iteration}/{total_iterations}, текущая ошибка: {error:.10f}")
+# Поиск минимальной ошибки
+min_error_index = np.unravel_index(np.argmin(errors), errors.shape)
+best_A = A_range[min_error_index[0]]
+best_B = B_range[min_error_index[1]]
+min_error = errors[min_error_index]
 
-        if error < min_error:
-            min_error = error
-            best_A, best_B = A, B
-
-print("\nОптимальные параметры найдены:")
+print(f"\nОптимальные параметры найдены:")
 print(f"A = {best_A}, B = {best_B}, минимальная ошибка = {min_error:.10f}")
 
 # Построение графиков
 total_sko = 0
 with open(os.path.join(output_folder, "sko_results.txt"), 'w', encoding='utf-8') as f:
     for i, alpha in enumerate(alpha_values):
-        y_model = model(alpha, best_A, best_B, phi1, phi2, y1, y2)
+        y_model = model(alpha, best_A, best_B, y1, y2)
         sko = np.sqrt(np.mean((y_data[i] - y_model) ** 2))
         total_sko += sko
 
@@ -112,7 +106,7 @@ with open(os.path.join(output_folder, "sko_results.txt"), 'w', encoding='utf-8')
     f.write(f"\nСреднее СКО: {avg_sko:.10f}")
 
 # График зависимости от угла
-y_alpha = [np.mean(model(alpha, best_A, best_B, phi1, phi2, y1, y2)) for alpha in alpha_values]
+y_alpha = [np.mean(model(alpha, best_A, best_B, y1, y2)) for alpha in alpha_values]
 plt.figure()
 plt.plot(alpha_values, y_alpha, 'o-', label="Модель")
 plt.xlabel("α (градусы)")
